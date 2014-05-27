@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"regexp"
 )
 
 var (
@@ -74,9 +75,16 @@ func main() {
 	verbose.Printf("Getting table list...\n")
 	tables := getTables(db)
 	for _, table := range tables {
+		continue
 		verbose.Printf("Dumping structure and data for table %s...\n", table)
 		dumpCreateTable(w, db, table)
 		dumpTableData(w, db, table)
+	}
+
+	triggers := getTriggers(db)
+	for _, trigger := range triggers {
+		verbose.Printf("Dumping structure for trigger %s...\n", trigger)
+		dumpTrigger(w, db, trigger)
 	}
 
 	fmt.Fprintf(w, "SET FOREIGN_KEY_CHECKS = 1;\n")
@@ -264,6 +272,36 @@ func dumpTableData(w io.Writer, db *sql.DB, table string) {
 	}
 
 	fmt.Fprintf(w, "\nUNLOCK TABLES;\n")
+}
+
+func getTriggers(db *sql.DB) (triggers []string) {
+	var trigger, event, table, statement, timing, created, sql_mode, definer, character_set_client, collaction_connection, database_collation sql.NullString
+
+	triggers = make([]string, 0)
+	rows, err := Query(db, "SHOW TRIGGERS")
+	checkError(err)
+	for rows.Next() {
+		err = rows.Scan(&trigger, &event, &table, &statement, &timing, &created, &sql_mode, &definer, &character_set_client, &collaction_connection, &database_collation)
+		checkError(err)
+		triggers = append(triggers, trigger.String)
+	}
+	checkError(rows.Err())
+	return
+}
+
+func dumpTrigger(w io.Writer, db *sql.DB, trigger string) {
+	fmt.Fprintf(w, "\n--\n")
+	fmt.Fprintf(w, "-- Structure for trigger `%s`\n", trigger)
+	fmt.Fprintf(w, "--\n\n")
+	fmt.Fprintf(w, "DROP TRIGGER IF EXISTS `%s`;\n", trigger)
+	row := QueryRow(db, fmt.Sprintf("SHOW CREATE TRIGGER `%s`", trigger))
+	var name, sql_mode, ddl, character_set_client, collation_connection, database_collation string
+	err := row.Scan(&name, &sql_mode, &ddl, &character_set_client, &collation_connection, &database_collation)
+	checkError(err)
+
+    reg, _ := regexp.Compile("DEFINER=([^ ]*) ")
+	ddl = reg.ReplaceAllString(ddl, "")
+	fmt.Fprintf(w, "%s;\n", ddl)
 }
 
 func escape(str string) string {

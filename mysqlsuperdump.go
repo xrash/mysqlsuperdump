@@ -75,7 +75,6 @@ func main() {
 	verbose.Printf("Getting table list...\n")
 	tables := getTables(db)
 	for _, table := range tables {
-		continue
 		verbose.Printf("Dumping structure and data for table %s...\n", table)
 		dumpCreateTable(w, db, table)
 		dumpTableData(w, db, table)
